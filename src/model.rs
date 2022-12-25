@@ -4,6 +4,8 @@ use crate::{CategoricalCrossEntorpy, Layer, Loss};
 
 pub trait Model {
     fn train(&mut self, inputs: &Array2<f64>, labels: &Array2<f64>);
+
+    fn predict(&mut self, inputs: &Array2<f64>) -> Array2<f64>;
 }
 
 /// Sequential model with default learning rate of 0.1
@@ -73,5 +75,15 @@ impl Model for Sequential {
         for l in self.layers.iter_mut().rev() {
             partial_deriv = l.backward(&partial_deriv);
         }
+    }
+
+    fn predict(&mut self, inputs: &Array2<f64>) -> Array2<f64> {
+        let mut last_output = inputs.clone();
+
+        for l in self.layers.iter() {
+            last_output = l.predict(last_output);
+        }
+
+        last_output
     }
 }

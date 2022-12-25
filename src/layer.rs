@@ -9,6 +9,8 @@ pub trait Layer {
     fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64>;
 
     fn backward(&mut self, dvalues: &Array2<f64>) -> Array2<f64>;
+
+    fn predict(&self, inputs: Array2<f64>) -> Array2<f64>;
 }
 
 /// dense network layer with weights and biases
@@ -66,6 +68,10 @@ impl Layer for Dense {
 
         self.dinputs.clone()
     }
+
+    fn predict(&self, inputs: Array2<f64>) -> Array2<f64> {
+        inputs.dot(&self.weights) + &self.biases
+    }
 }
 
 /// dropout network layer with dropout mask
@@ -104,6 +110,10 @@ impl Layer for Dropout {
     fn backward(&mut self, dvalues: &Array2<f64>) -> Array2<f64> {
         dvalues * &self.mask
     }
+
+    fn predict(&self, inputs: Array2<f64>) -> Array2<f64> {
+        inputs * &self.mask
+    }
 }
 
 /// rectified linear activation function layer
@@ -129,6 +139,10 @@ impl Layer for ReLU {
     fn backward(&mut self, dvalues: &Array2<f64>) -> Array2<f64> {
         relu_grad(&self.last_inputs, dvalues)
     }
+
+    fn predict(&self, inputs: Array2<f64>) -> Array2<f64> {
+        relu(&inputs)
+    }
 }
 
 /// Softmax activation function layer
@@ -153,5 +167,9 @@ impl Layer for Softmax {
 
     fn backward(&mut self, dvalues: &Array2<f64>) -> Array2<f64> {
         softmax_grad(&self.last_inputs, dvalues)
+    }
+
+    fn predict(&self, inputs: Array2<f64>) -> Array2<f64> {
+        softmax(&inputs)
     }
 }
