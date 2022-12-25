@@ -36,12 +36,12 @@ fn main() {
     let y = one_hot_encode(y);
 
     for e in 1..n_epochs + 1 {
-        model.train(&x, &y);
+        model.fit(&x, &y);
 
         if e % 200 == 0 {
             println!("\nepoch {}/{}", e, n_epochs);
-            println!("loss: {}", &model.loss());
-            println!("acc: {}", &model.accuracy());
+            println!("loss: {}", &model.loss(&x, &y));
+            println!("acc: {}", &model.accuracy(&x, &y));
         }
     }
 }

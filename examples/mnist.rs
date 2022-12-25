@@ -64,7 +64,7 @@ pub fn load_mnist_dataset(
 fn main() {
     let epochs = 10;
     let batch_size = 20000;
-    let learning_rate = 0.05;
+    let learning_rate = 0.1;
 
     let ((x_train, y_train), _) = load_mnist_dataset();
 
@@ -81,7 +81,7 @@ fn main() {
         (x_train.shape()[0] as f64 / batch_size as f64).floor() as i32;
 
     println!(
-        "\nWill train {} epochs with each {} batches of size {}",
+        "\nWill train {} epochs each with {} batches of size {}",
         epochs, number_of_batches, batch_size
     );
 
@@ -95,15 +95,15 @@ fn main() {
             let x_batch = x_train.slice(s![start..end, ..]).to_owned();
             let y_batch = y_train.slice(s![start..end, ..]).to_owned();
 
+            model.fit(&x_batch, &y_batch);
+
             println!(
                 "[{}/{}]: loss: {:.4} acc: {:.4}",
                 end,
                 x_train.nrows(),
-                model.loss(),
-                model.accuracy(),
+                model.loss(&x_batch, &y_batch),
+                model.accuracy(&x_batch, &y_batch),
             );
-
-            model.train(&x_batch, &y_batch);
         }
     }
 }

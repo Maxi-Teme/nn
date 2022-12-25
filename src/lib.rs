@@ -54,7 +54,7 @@ mod test {
         model.add_layer(Dense::new(10, 2, None));
         model.add_layer(Softmax::new());
 
-        model.train(&x_train, &y_train);
+        model.fit(&x_train, &y_train);
 
         // model.test(&x_train, &y_train);
     }
