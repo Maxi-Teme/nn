@@ -1,4 +1,6 @@
-use ndarray::{Array2, Axis, Zip};
+use ndarray::{Array2, Axis};
+
+use crate::clamp64;
 
 pub trait Loss {
     fn mean_loss(
@@ -14,94 +16,92 @@ pub trait Loss {
 pub struct CategoricalCrossEntorpy;
 
 impl Loss for CategoricalCrossEntorpy {
-    /// − ∑ y ln(p)
+    /// − ∑ y * ln(p)
     fn mean_loss(
         &self,
         predictions: &Array2<f64>,
         targets: &Array2<f64>,
     ) -> f64 {
-        Zip::from(
-            predictions
-                .map(|i| i.clamp(f64::EPSILON, 1.0 - f64::EPSILON).ln())
-                .axis_iter(Axis(0)),
-        )
-        .and(targets.axis_iter(Axis(0)))
-        .map_collect(|p, t| -p.dot(&t))
-        .mean()
-        .unwrap()
+        // assert_eq!(predictions.shape(), targets.shape());
+        // assert!(predictions.iter().all(|i| !i.is_nan() && !i.is_infinite()));
+        // assert!(targets.iter().all(|i| !i.is_nan() && !i.is_infinite()));
+
+        -(predictions.map(|p| (p + f64::EPSILON).ln()) * targets)
+            .mean_axis(Axis(0))
+            .unwrap()
+            .sum()
     }
 
+    /// (-1.0 * targets) / predictions + (1.0 - targets) / (1.0 - predictions)
     fn derivative(
         &self,
         predictions: &Array2<f64>,
         targets: &Array2<f64>,
     ) -> Array2<f64> {
-        (-1.0 * targets) / predictions + (1.0 - targets) / (1.0 - predictions)
+        assert!(predictions.iter().all(|i| !i.is_nan() && !i.is_infinite()));
+        assert!(targets.iter().all(|i| !i.is_nan() && !i.is_infinite()));
+
+        let mut grad = (-1.0 * targets) / predictions
+            + (1.0 - targets) / (1.0 - predictions);
+
+        clamp64(&mut grad);
+
+        grad
     }
 }
 
 #[cfg(test)]
 mod test {
-    use ndarray::Array2;
+    use ndarray::{Array2, Axis};
+
+    use crate::test_util;
 
     use super::{CategoricalCrossEntorpy, Loss};
 
     #[test]
-    fn calculate_categorical_cross_entropy() {
+    fn calculate_categorical_cross_entropy_forward() {
         let ccr = CategoricalCrossEntorpy::default();
 
-        let predicions = Array2::from_shape_vec(
-            (3, 2),
-            vec![0.7, 0.3, 0.5, 0.5, 0.05, 0.95],
-        )
-        .unwrap();
-        let targets =
-            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 0.0, 1.0])
+        let predicions =
+            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
                 .unwrap();
-
-        let loss = ccr.mean_loss(&predicions, &targets);
-        let loss = Array2::from_elem(targets.raw_dim(), loss);
-
-        assert!(
-            loss.get((0, 0)).unwrap() < &1.0,
-            "loss was grater than 1.0. Got: {}",
-            loss.get((0, 0)).unwrap()
-        );
-
-        let predicions = Array2::from_shape_vec(
-            (3, 2),
-            vec![0.99, 0.0, 0.99, 0.0, 0.0, 0.99],
-        )
-        .unwrap();
         let targets =
-            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 0.0, 1.0])
+            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
                 .unwrap();
-
         let loss = ccr.mean_loss(&predicions, &targets);
-        let loss = Array2::from_elem(targets.raw_dim(), loss);
+        assert!(loss < 10e-10, "loss was grater than 1.0. Got: {}", loss);
 
-        assert!(
-            loss.get((0, 0)).unwrap() < &0.02,
-            "loss was grater than 0.02. Got: {}",
-            loss.get((0, 0)).unwrap()
-        );
-
-        let predicions = Array2::from_shape_vec(
-            (3, 2),
-            vec![0.0, 0.99, 0.0, 0.99, 0.99, 0.0],
-        )
-        .unwrap();
         let targets =
-            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 0.0, 1.0])
+            Array2::from_shape_vec((3, 2), vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
                 .unwrap();
-
         let loss = ccr.mean_loss(&predicions, &targets);
-        let loss = Array2::from_elem(targets.raw_dim(), loss);
+        assert!(loss > 35.0, "loss was grater than 1.0. Got: {}", loss);
+        dbg!(&loss);
+    }
 
-        assert!(
-            loss.get((0, 0)).unwrap() > &35.0,
-            "loss was less than 35.0. Got: {}",
-            loss.get((0, 0)).unwrap()
-        );
+    fn mean_loss1(predictions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
+        -(predictions.map(|p| (p + f64::EPSILON).ln()) * targets).sum()
+            / predictions.shape()[0] as f64
+    }
+
+    fn mean_loss2(predictions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
+        -(predictions.map(|p| (p + f64::EPSILON).ln()) * targets)
+            .mean_axis(Axis(0))
+            .unwrap()
+            .sum()
+    }
+
+    #[test]
+    fn test_ccr() {
+        let predicions =
+            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
+                .unwrap();
+        let targets =
+            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
+                .unwrap();
+        let loss1 = mean_loss1(&predicions, &targets);
+        let loss2 = mean_loss2(&predicions, &targets);
+        dbg!(&loss1, &loss2);
+        assert_eq!(loss1, loss2);
     }
 }

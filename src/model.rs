@@ -7,11 +7,9 @@ use crate::loss::Loss;
 use crate::{CategoricalCrossEntorpy, Layer};
 
 pub trait Model {
-    fn info(&self, detail: bool);
     fn train(&mut self, inputs: &Array2<f64>, labels: &Array2<f64>) -> f64;
 }
 
-#[derive(Debug)]
 pub struct Sequential<Lo: Loss + Debug> {
     layers: Vec<Layer>,
     loss_fn: Lo,
@@ -40,58 +38,32 @@ impl<Lo: Loss + Debug> Sequential<Lo> {
         self.learning_rate = learning_rate;
     }
 
-    pub fn predict(&mut self, x: &Array2<f64>) -> Array2<f64> {
-        let mut input = x.clone();
-        let ones = Array2::ones(x.raw_dim());
-
-        for l in self.layers.iter_mut() {
-            (input, _) = l.forward(&input, &ones);
-        }
-
-        input
-    }
-
-    pub fn test(
-        &mut self,
-        x_test: &Array2<f64>,
-        y_test: &Array2<usize>,
-    ) -> f64 {
-        let x_size = x_test.shape()[0].clone() as f64;
-
-        let predictions = self.predict(x_test);
-        let predictions = self.argmax(predictions);
-        let mut right = 0.0;
-
-        for (p, y) in predictions
-            .axis_iter(Axis(0))
-            .zip(y_test.axis_iter(Axis(0)))
-        {
-            if p == y {
-                right += 1.0;
-            }
-        }
-
-        right / x_size
-    }
-
-    pub fn run_training(&mut self) {
+    pub fn build(&mut self) -> Result<(), String> {
         todo!()
     }
 
-    fn argmax(&self, predictions: Array2<f64>) -> Array2<usize> {
-        let mut preds = vec![];
+    // pub fn test(&mut self, x_test: &Array2<f64>, y_test: &Array2<f64>) -> f64 {
+    //     let mut input = x_test;
 
-        for p in predictions.axis_iter(Axis(0)) {
-            preds.push(p.argmax().unwrap());
-        }
+    //     for l in self.layers.iter_mut() {
+    //         let (a, _) = l.forward(&input);
+    //         input = a;
+    //     }
 
-        Array2::from_shape_vec((predictions.shape()[0], 1), preds).unwrap()
-    }
+    //     let predictions = self.argmax(&input);
+    //     let y_test = self.argmax(y_test);
 
-    pub fn peek_weight(&self, layer: usize, index: (usize, usize)) {
-        if let Layer::Dense(ref dense) = self.layers[layer] {
-            dense.peek_weight(index);
-        }
+    //     let correct_classifications = eq(&predictions, &y_test, false);
+    //     let number_of_correctly_classified =
+    //         sum_all(&correct_classifications).0 as u64;
+
+    //     number_of_correctly_classified as f64 / x_test.dims()[1] as f64
+    // }
+
+    fn _argmax(&self, predictions: &Array2<f64>) -> Array2<usize> {
+        predictions
+            .map_axis(Axis(1), |a| a.argmax_skipnan().unwrap())
+            .insert_axis(Axis(1))
     }
 }
 
@@ -103,56 +75,42 @@ impl Sequential<CategoricalCrossEntorpy> {
 }
 
 impl<Lo: Loss + Debug> Model for Sequential<Lo> {
-    fn info(&self, detail: bool) {
-        println!("\n------------- model info start -------------");
-        println!("Loss function: {:#?}", self.loss_fn);
-
-        for layer in self.layers.iter() {
-            layer.info(detail);
-        }
-        println!("------------- model info end -------------\n");
-    }
-
     fn train(&mut self, inputs: &Array2<f64>, labels: &Array2<f64>) -> f64 {
         assert!(
             self.layers.len() > 0,
             "Expected Sequential model to have at least one layer"
         );
+        assert!(inputs.iter().all(|i| !i.is_nan() && !i.is_infinite()));
+        assert!(labels.iter().all(|i| !i.is_nan() && !i.is_infinite()));
 
         //
         // forward
         //
-        let ones = Array2::ones(inputs.raw_dim());
         let mut outs = Vec::with_capacity(self.layers.len());
         let mut input = inputs.clone();
 
         for l in self.layers.iter_mut() {
-            let (a, z) = l.forward(&input, &ones);
+            let (a, z) = l.forward(&input);
             outs.push((input, z));
             input = a;
         }
-        outs.push((input, None));
+        // outs.push((input, None));
 
         //
         // backward
         //
-        let mut out_iter = outs.into_iter().rev();
-        let last_activation = &out_iter.next().unwrap().0;
+        let mean_loss = self.loss_fn.mean_loss(&input, labels);
 
-        let mut partial_error =
-            self.loss_fn.derivative(last_activation, labels);
-        let loss = self.loss_fn.mean_loss(last_activation, labels);
+        let mut partial_error = Array2::<f64>::ones(input.raw_dim());
 
-        for (layer, (a, z)) in self.layers.iter_mut().rev().zip(out_iter) {
-            partial_error = layer.backward(
-                &partial_error,
-                &z.unwrap(),
-                &a,
-                self.learning_rate,
-            );
+        for (layer, (a, z)) in
+            self.layers.iter_mut().rev().zip(outs.into_iter().rev())
+        {
+            partial_error =
+                layer.backward(&partial_error, z, &a, self.learning_rate);
         }
 
-        loss
+        mean_loss
     }
 }
 
@@ -163,42 +121,33 @@ mod test {
     use crate::activation::Activation;
     use crate::{Layer, Model};
 
+    use crate::test_util;
+
     use super::Sequential;
 
     #[test]
-    fn sequential_model_train_test() {
-        let x_train = Array2::from_shape_vec(
-            (4, 2),
-            vec![0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0],
-        )
-        .unwrap();
-        let y_train = Array2::from_shape_vec(
-            (4, 2),
-            vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0],
-        )
-        .unwrap();
+    fn sequential_model_test1() {
+        let x_train =
+            Array2::from_shape_vec((1, 784), test_util::ONE_IMAGE_X.to_vec())
+                .unwrap();
+        let y_train =
+            Array2::from_shape_vec((1, 10), test_util::ONE_IMAGE_Y.to_vec())
+                .unwrap();
 
         let mut model = Sequential::categorical();
 
-        model.add_layer(Layer::dense(2, 10, Activation::relu()));
-        model.add_layer(Layer::dense(10, 10, Activation::relu()));
-        model.add_layer(Layer::dense(10, 2, Activation::softmax()));
+        model.add_layer(Layer::dense(784, 400, Activation::relu()));
+        model.add_layer(Layer::dropout(400, 1, 8));
+        model.add_layer(Layer::dense(400, 400, Activation::relu()));
+        model.add_layer(Layer::dropout(400, 1, 8));
+        model.add_layer(Layer::dense(400, 10, Activation::softmax()));
 
-        let mut loss = 0.0;
-        for i in 0..10000 {
-            if i % 1000 == 0 {
-                println!("{}", loss);
-                model.peek_weight(0, (0, 0));
-                model.peek_weight(1, (0, 0));
-                model.peek_weight(2, (0, 0));
-            }
+        let loss = model.train(&x_train, &y_train);
 
-            loss = model.train(&x_train, &y_train);
-        }
+        dbg!(&loss);
 
-        let y_test = Array2::from_shape_vec((4, 1), vec![0, 1, 1, 1]).unwrap();
+        let nann = f64::NAN;
 
-        let accuracy = model.test(&x_train, &y_test);
-        println!("{:?}", accuracy);
+        println!("{}", nann.clamp(f64::MIN, f64::MAX));
     }
 }

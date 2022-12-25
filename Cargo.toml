@@ -10,8 +10,6 @@ ndarray = { version = "0.15", features = [] }
 ndarray-rand = "0.14"
 ndarray-stats = "0.5"
 
-# arrayfire = "3.8"
-
 [[example]]
 name = "mnist"
 
