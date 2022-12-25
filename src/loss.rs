@@ -1,107 +1,96 @@
-use ndarray::{Array2, Axis};
+use ndarray::Array2;
 
-use crate::clamp64;
+use crate::functions::{
+    accuracy, ccr_grad, ccr_mean, softmax, softmax_and_ccr_grad,
+};
 
 pub trait Loss {
     fn mean_loss(
-        &self,
-        predictions: &Array2<f64>,
+        &mut self,
+        predicions: &Array2<f64>,
         targets: &Array2<f64>,
     ) -> f64;
 
-    fn derivative(&self, y: &Array2<f64>, a: &Array2<f64>) -> Array2<f64>;
+    fn accuracy(
+        &mut self,
+        predicions: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> f64;
+
+    fn backward(&mut self, targets: &Array2<f64>) -> Array2<f64>;
 }
 
-#[derive(Debug, Default)]
-pub struct CategoricalCrossEntorpy;
+/// Softmax activation and categorical cross entropy loss layer
+pub struct SoftmaxAndCategoricalCrossEntropy {
+    last_inputs: Array2<f64>,
+}
 
-impl Loss for CategoricalCrossEntorpy {
-    /// − ∑ y * ln(p)
+impl SoftmaxAndCategoricalCrossEntropy {
+    pub fn new() -> Box<Self> {
+        Box::new(Self {
+            last_inputs: Array2::<f64>::zeros((0, 0)),
+        })
+    }
+}
+
+impl Loss for SoftmaxAndCategoricalCrossEntropy {
     fn mean_loss(
-        &self,
+        &mut self,
         predictions: &Array2<f64>,
         targets: &Array2<f64>,
     ) -> f64 {
-        // assert_eq!(predictions.shape(), targets.shape());
-        // assert!(predictions.iter().all(|i| !i.is_nan() && !i.is_infinite()));
-        // assert!(targets.iter().all(|i| !i.is_nan() && !i.is_infinite()));
+        self.last_inputs = softmax(predictions);
 
-        -(predictions.map(|p| (p + f64::EPSILON).ln()) * targets)
-            .mean_axis(Axis(0))
-            .unwrap()
-            .sum()
+        ccr_mean(&self.last_inputs, targets)
     }
 
-    /// (-1.0 * targets) / predictions + (1.0 - targets) / (1.0 - predictions)
-    fn derivative(
-        &self,
+    fn accuracy(
+        &mut self,
         predictions: &Array2<f64>,
         targets: &Array2<f64>,
-    ) -> Array2<f64> {
-        assert!(predictions.iter().all(|i| !i.is_nan() && !i.is_infinite()));
-        assert!(targets.iter().all(|i| !i.is_nan() && !i.is_infinite()));
+    ) -> f64 {
+        self.last_inputs = softmax(predictions);
 
-        let mut grad = (-1.0 * targets) / predictions
-            + (1.0 - targets) / (1.0 - predictions);
+        accuracy(&self.last_inputs, targets)
+    }
 
-        clamp64(&mut grad);
-
-        grad
+    fn backward(&mut self, targets: &Array2<f64>) -> Array2<f64> {
+        softmax_and_ccr_grad(&self.last_inputs, targets)
     }
 }
 
-#[cfg(test)]
-mod test {
-    use ndarray::{Array2, Axis};
+/// Categorical cross entropy loss layer
+pub struct CategoricalCrossEntorpy {
+    last_inputs: Array2<f64>,
+}
 
-    use crate::test_util;
+impl CategoricalCrossEntorpy {
+    pub fn new() -> Box<Self> {
+        Box::new(Self {
+            last_inputs: Array2::<f64>::zeros((0, 0)),
+        })
+    }
+}
 
-    use super::{CategoricalCrossEntorpy, Loss};
-
-    #[test]
-    fn calculate_categorical_cross_entropy_forward() {
-        let ccr = CategoricalCrossEntorpy::default();
-
-        let predicions =
-            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
-                .unwrap();
-        let targets =
-            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
-                .unwrap();
-        let loss = ccr.mean_loss(&predicions, &targets);
-        assert!(loss < 10e-10, "loss was grater than 1.0. Got: {}", loss);
-
-        let targets =
-            Array2::from_shape_vec((3, 2), vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0])
-                .unwrap();
-        let loss = ccr.mean_loss(&predicions, &targets);
-        assert!(loss > 35.0, "loss was grater than 1.0. Got: {}", loss);
-        dbg!(&loss);
+impl Loss for CategoricalCrossEntorpy {
+    fn mean_loss(
+        &mut self,
+        predictions: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> f64 {
+        self.last_inputs = predictions.clone();
+        ccr_mean(&self.last_inputs, targets)
     }
 
-    fn mean_loss1(predictions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
-        -(predictions.map(|p| (p + f64::EPSILON).ln()) * targets).sum()
-            / predictions.shape()[0] as f64
+    fn accuracy(
+        &mut self,
+        predicions: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> f64 {
+        accuracy(predicions, targets)
     }
 
-    fn mean_loss2(predictions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
-        -(predictions.map(|p| (p + f64::EPSILON).ln()) * targets)
-            .mean_axis(Axis(0))
-            .unwrap()
-            .sum()
-    }
-
-    #[test]
-    fn test_ccr() {
-        let predicions =
-            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
-                .unwrap();
-        let targets =
-            Array2::from_shape_vec((3, 2), vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
-                .unwrap();
-        let loss1 = mean_loss1(&predicions, &targets);
-        let loss2 = mean_loss2(&predicions, &targets);
-        dbg!(&loss1, &loss2);
-        assert_eq!(loss1, loss2);
+    fn backward(&mut self, targets: &Array2<f64>) -> Array2<f64> {
+        ccr_grad(&self.last_inputs, targets)
     }
 }

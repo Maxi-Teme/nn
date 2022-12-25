@@ -1,6 +1,8 @@
 use ndarray::{Array1, Array2, Axis};
 use ndarray_stats::QuantileExt;
 
+use crate::conversions::one_hot_decode;
+
 pub fn relu(inputs: &Array2<f64>) -> Array2<f64> {
     inputs.map(|i| i.max(0.0))
 }
@@ -9,7 +11,6 @@ pub fn relu_grad(finputs: &Array2<f64>, dvalues: &Array2<f64>) -> Array2<f64> {
     dvalues * finputs.map(|i| if *i <= 0.0 { 0.0 } else { 1.0 })
 }
 
-/// from: https://aimatters.wordpress.com/2020/06/14/derivative-of-softmax-layer/
 pub fn softmax(inputs: &Array2<f64>) -> Array2<f64> {
     let mut result = Array2::<f64>::zeros(inputs.raw_dim());
 
@@ -57,11 +58,10 @@ pub fn softmax_and_ccr_grad(
 
     let samples = dvalues.nrows();
 
-    let y_true = targets
-        .map_axis(Axis(1), |a| a.iter().position(|i| *i != 0.0).unwrap());
+    let y_true = one_hot_decode(targets);
 
     for (mut drow, y) in dinputs.axis_iter_mut(Axis(0)).zip(y_true.iter()) {
-        let update = drow.get_mut(*y).unwrap();
+        let update = drow.get_mut(*y as usize).unwrap();
         *update -= 1.0;
     }
 
@@ -83,17 +83,26 @@ fn ccr(predictions: &Array2<f64>, targets: &Array2<f64>) -> Array1<f64> {
 
 pub fn ccr_grad(dvalues: &Array2<f64>, targets: &Array2<f64>) -> Array2<f64> {
     let dinputs = -targets / dvalues;
-    dinputs / targets.shape()[0] as f64
+    dinputs / targets.nrows() as f64
 }
 
 // accuracy
 //
 
 pub fn accuracy(predictions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
-    let correct_classes =
-        argmax(predictions).map(|i| *i as f64).insert_axis(Axis(1));
+    let predicted_class_indices = argmax(predictions).map(|i| *i as f64);
+    let target_class_indices = one_hot_decode(&targets);
 
-    (correct_classes * targets).mean().unwrap()
+    let mut correct = 0;
+
+    for (p, t) in predicted_class_indices
+        .iter()
+        .zip(target_class_indices.iter())
+    {
+        correct += (p == t) as usize;
+    }
+
+    correct as f64 / targets.nrows() as f64
 }
 
 fn argmax(predictions: &Array2<f64>) -> Array1<usize> {
@@ -102,9 +111,44 @@ fn argmax(predictions: &Array2<f64>) -> Array1<usize> {
 
 #[cfg(test)]
 mod test {
-    use ndarray::{Array2, Axis};
+    use ndarray::{Array1, Array2};
 
-    use super::{ccr_grad, softmax_and_ccr_grad, softmax_grad};
+    use super::{
+        accuracy, argmax, ccr_grad, softmax_and_ccr_grad, softmax_grad,
+    };
+
+    #[test]
+    fn accuracy_test() {
+        let predictions = Array2::<f64>::from_shape_vec(
+            (4, 2),
+            vec![0.1, 0.9, 0.2, 0.8, 0.51, 0.49, 0.7, 0.3],
+        )
+        .unwrap();
+
+        let targets = Array2::<f64>::from_shape_vec(
+            (4, 2),
+            vec![0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0],
+        )
+        .unwrap();
+        let acc = accuracy(&predictions, &targets);
+        assert_eq!(acc, 1.0);
+
+        let targets = Array2::<f64>::from_shape_vec(
+            (4, 2),
+            vec![1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0],
+        )
+        .unwrap();
+        let acc = accuracy(&predictions, &targets);
+        assert_eq!(acc, 0.0);
+
+        let targets = Array2::<f64>::from_shape_vec(
+            (4, 2),
+            vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0],
+        )
+        .unwrap();
+        let acc = accuracy(&predictions, &targets);
+        assert_eq!(acc, 0.5);
+    }
 
     #[test]
     fn derive_ccr_then_softmax() {
@@ -134,16 +178,17 @@ mod test {
     }
 
     #[test]
-    fn one_hot_to_spartial() {
-        let one_hot = Array2::<f64>::from_shape_vec(
-            (4, 3),
-            vec![0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+    fn argmax_test() {
+        let predictions = Array2::<f64>::from_shape_vec(
+            (4, 2),
+            vec![0.1, 0.9, 0.2, 0.8, 0.51, 0.49, 0.7, 0.3],
         )
         .unwrap();
 
-        let spartial = one_hot
-            .map_axis(Axis(1), |a| a.iter().position(|i| *i != 0.0).unwrap());
+        let amax = argmax(&predictions);
 
-        dbg!(&spartial);
+        let expected = Array1::<usize>::from_vec(vec![1, 1, 0, 0]);
+
+        assert_eq!(amax, expected);
     }
 }

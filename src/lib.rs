@@ -1,17 +1,16 @@
 use ndarray::{Array, Dimension};
 
-mod activation;
+pub mod conversions;
+pub mod functions;
+pub mod helpers;
 mod layer;
 mod loss;
 mod model;
-pub mod functions;
 
-#[cfg(test)]
-mod test_util;
-
-pub use activation::Activation;
-pub use layer::Layer;
-pub use loss::CategoricalCrossEntorpy;
+pub use layer::{Dense, Dropout, Layer, ReLU, Softmax};
+pub use loss::{
+    CategoricalCrossEntorpy, Loss, SoftmaxAndCategoricalCrossEntropy,
+};
 pub use model::{Model, Sequential};
 
 pub fn clamp64<D: Dimension>(arr: &mut Array<f64, D>) {
@@ -28,9 +27,9 @@ pub fn clamp64<D: Dimension>(arr: &mut Array<f64, D>) {
 mod test {
     use ndarray::Array2;
 
-    use crate::activation::Activation;
+    use crate::layer::{Dense, ReLU, Softmax};
 
-    use super::{Layer, Model, Sequential};
+    use super::{Model, Sequential};
 
     #[test]
     fn sequential_model_test() {
@@ -48,11 +47,12 @@ mod test {
         )
         .unwrap();
 
-        let mut model = Sequential::categorical();
+        let mut model = Sequential::new();
 
-        model.add_layer(Layer::dense(2, 10, Activation::relu()));
-        // model.add_layer(Layer::dropout(10, 10, 0.9));
-        model.add_layer(Layer::dense(10, 2, Activation::softmax()));
+        model.add_layer(Dense::new(2, 10, None));
+        model.add_layer(ReLU::new());
+        model.add_layer(Dense::new(10, 2, None));
+        model.add_layer(Softmax::new());
 
         model.train(&x_train, &y_train);
 
