@@ -1,3 +1,5 @@
+extern crate blas_src;
+
 use ndarray::{s, Array1, Array2};
 use nn::conversions::one_hot_encode;
 use nn::{Dense, Model, ReLU, Sequential, SoftmaxAndCategoricalCrossEntropy};
@@ -62,16 +64,16 @@ pub fn load_mnist_dataset(
 }
 
 fn main() {
-    let epochs = 10;
-    let batch_size = 20000;
+    let epochs = 20;
+    let batch_size = 10000;
     let learning_rate = 0.1;
 
     let ((x_train, y_train), _) = load_mnist_dataset();
 
     let mut model = Sequential::new();
-    model.add_layer(Dense::new(x_train.ncols(), 200, Some(learning_rate)));
+    model.add_layer(Dense::new(x_train.ncols(), 800, Some(learning_rate)));
     model.add_layer(ReLU::new());
-    model.add_layer(Dense::new(200, y_train.ncols(), Some(learning_rate)));
+    model.add_layer(Dense::new(800, y_train.ncols(), Some(learning_rate)));
     model.set_loss_fn(SoftmaxAndCategoricalCrossEntropy::new());
 
     println!("Training data has {} datapoints.\n", x_train.shape()[0]);

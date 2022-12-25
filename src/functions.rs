@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Axis};
+use ndarray::{Array1, Array2, Axis, Zip};
 use ndarray_stats::QuantileExt;
 
 use crate::conversions::one_hot_decode;
@@ -14,14 +14,14 @@ pub fn relu_grad(finputs: &Array2<f64>, dvalues: &Array2<f64>) -> Array2<f64> {
 pub fn softmax(inputs: &Array2<f64>) -> Array2<f64> {
     let mut result = Array2::<f64>::zeros(inputs.raw_dim());
 
-    for (mut result, row) in
-        result.axis_iter_mut(Axis(0)).zip(inputs.axis_iter(Axis(0)))
-    {
-        let max = row.fold(f64::EPSILON, |acc, x| x.max(acc));
-        let exps = row.map(|x| (x - max).exp());
+    Zip::from(result.axis_iter_mut(Axis(0)))
+        .and(inputs.axis_iter(Axis(0)))
+        .for_each(|mut result, row| {
+            let max = row.fold(f64::EPSILON, |acc, x| x.max(acc));
+            let exps = row.map(|x| (x - max).exp());
 
-        result.assign(&(&exps / exps.sum()));
-    }
+            result.assign(&(&exps / exps.sum()));
+        });
 
     result
 }
@@ -33,19 +33,16 @@ pub fn softmax_grad(
 ) -> Array2<f64> {
     let mut dinputs = Array2::<f64>::zeros(dvalues.raw_dim());
 
-    for (idx, (single_output, single_dvalues)) in foutputs
-        .axis_iter(Axis(0))
-        .zip(dvalues.axis_iter(Axis(0)))
-        .enumerate()
-    {
-        let single_output_m = single_output.insert_axis(Axis(1));
-        let jacobian_matrix = Array2::from_diag(&single_output)
-            - single_output_m.dot(&single_output_m.t());
+    Zip::from(foutputs.axis_iter(Axis(0)))
+        .and(dvalues.axis_iter(Axis(0)))
+        .and(dinputs.axis_iter_mut(Axis(0)))
+        .for_each(|single_output, single_dvalues, mut dinputs_row| {
+            let single_output_m = single_output.insert_axis(Axis(1));
+            let jacobian_matrix = Array2::from_diag(&single_output)
+                - single_output_m.dot(&single_output_m.t());
 
-        dinputs
-            .row_mut(idx)
-            .assign(&jacobian_matrix.dot(&single_dvalues));
-    }
+            dinputs_row.assign(&jacobian_matrix.dot(&single_dvalues));
+        });
 
     dinputs
 }
@@ -60,10 +57,12 @@ pub fn softmax_and_ccr_grad(
 
     let y_true = one_hot_decode(targets);
 
-    for (mut drow, y) in dinputs.axis_iter_mut(Axis(0)).zip(y_true.iter()) {
-        let update = drow.get_mut(*y as usize).unwrap();
-        *update -= 1.0;
-    }
+    Zip::from(dinputs.axis_iter_mut(Axis(0)))
+        .and(&y_true)
+        .for_each(|mut drow, y| {
+            let update = drow.get_mut(*y as usize).unwrap();
+            *update -= 1.0;
+        });
 
     dinputs / samples as f64
 }
@@ -93,16 +92,11 @@ pub fn accuracy(predictions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
     let predicted_class_indices = argmax(predictions).map(|i| *i as f64);
     let target_class_indices = one_hot_decode(&targets);
 
-    let mut correct = 0;
+    let correct: f64 = Zip::from(&predicted_class_indices)
+        .and(&target_class_indices)
+        .fold(0.0, |acc, p, t| if p == t { acc + 1.0 } else { acc });
 
-    for (p, t) in predicted_class_indices
-        .iter()
-        .zip(target_class_indices.iter())
-    {
-        correct += (p == t) as usize;
-    }
-
-    correct as f64 / targets.nrows() as f64
+    correct / targets.nrows() as f64
 }
 
 fn argmax(predictions: &Array2<f64>) -> Array1<usize> {
