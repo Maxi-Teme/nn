@@ -9,11 +9,9 @@ edition = "2021"
 ndarray = { version = "0.15", features = ["blas"] }
 ndarray-rand = "0.14"
 ndarray-stats = "0.5"
-
-[[example]]
-name = "mnist"
+dyn-clone = "1.0.10"
+openblas-src = { version = "0.10.7", features = ["cblas", "system"] }
 
 [dev-dependencies]
 mnist_read = "*"
 blas-src = { version = "0.8", features = ["openblas"] }
-openblas-src = { version = "0.10.7", features = ["cblas", "system"] }

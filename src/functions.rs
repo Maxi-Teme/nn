@@ -99,7 +99,7 @@ pub fn accuracy(predictions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
     correct / targets.nrows() as f64
 }
 
-fn argmax(predictions: &Array2<f64>) -> Array1<usize> {
+pub fn argmax(predictions: &Array2<f64>) -> Array1<usize> {
     predictions.map_axis(Axis(1), |a| a.argmax_skipnan().unwrap())
 }
 

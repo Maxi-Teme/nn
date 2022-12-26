@@ -13,6 +13,7 @@ pub trait Model {
 }
 
 /// Sequential model with default learning rate of 0.1
+#[derive(Clone)]
 pub struct Sequential {
     layers: Vec<Box<dyn Layer>>,
     loss_fn: Box<dyn Loss>,

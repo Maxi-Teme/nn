@@ -1,3 +1,4 @@
+use dyn_clone::DynClone;
 use ndarray::{Array1, Array2, Axis};
 use ndarray_rand::rand::Rng;
 use ndarray_rand::rand_distr::Uniform;
@@ -5,7 +6,7 @@ use ndarray_rand::RandomExt;
 
 use crate::functions::{relu, relu_grad, softmax, softmax_grad};
 
-pub trait Layer {
+pub trait Layer: DynClone {
     fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64>;
 
     fn backward(&mut self, dvalues: &Array2<f64>) -> Array2<f64>;
@@ -13,7 +14,10 @@ pub trait Layer {
     fn predict(&self, inputs: Array2<f64>) -> Array2<f64>;
 }
 
+dyn_clone::clone_trait_object!(Layer);
+
 /// dense network layer with weights and biases
+#[derive(Debug, Clone)]
 pub struct Dense {
     weights: Array2<f64>,
     biases: Array1<f64>,
@@ -75,6 +79,7 @@ impl Layer for Dense {
 }
 
 /// dropout network layer with dropout mask
+#[derive(Debug, Clone)]
 pub struct Dropout {
     mask: Array1<f64>,
     frac: (u32, u32),
@@ -117,6 +122,7 @@ impl Layer for Dropout {
 }
 
 /// rectified linear activation function layer
+#[derive(Debug, Clone)]
 pub struct ReLU {
     last_inputs: Array2<f64>,
 }
@@ -146,6 +152,7 @@ impl Layer for ReLU {
 }
 
 /// Softmax activation function layer
+#[derive(Debug, Clone)]
 pub struct Softmax {
     last_inputs: Array2<f64>,
 }

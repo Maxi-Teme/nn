@@ -1,3 +1,5 @@
+extern crate blas_src;
+
 use nn::{Dense, Model, ReLU, Sequential, SoftmaxAndCategoricalCrossEntropy};
 
 use nn::conversions::one_hot_encode;

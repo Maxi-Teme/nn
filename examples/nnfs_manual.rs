@@ -1,3 +1,5 @@
+extern crate blas_src;
+
 use ndarray::{Array2, Axis};
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
@@ -9,7 +11,7 @@ use nn::helpers;
 
 fn main() {
     let n_epochs = 10000;
-    let learning_rate = 1.0;
+    let learning_rate = 0.1;
 
     let n_inputs = 2;
     let hidden_layer_size = 64;
