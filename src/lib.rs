@@ -27,7 +27,7 @@ pub fn clamp64<D: Dimension>(arr: &mut Array<f64, D>) {
 mod test {
     use ndarray::Array2;
 
-    use crate::layer::{Dense, ReLU, Softmax};
+    use crate::Layer;
 
     use super::{Model, Sequential};
 
@@ -49,10 +49,10 @@ mod test {
 
         let mut model = Sequential::new();
 
-        model.add_layer(Dense::new(2, 10, None));
-        model.add_layer(ReLU::new());
-        model.add_layer(Dense::new(10, 2, None));
-        model.add_layer(Softmax::new());
+        model.add_layer(Layer::new_dense(2, 10, None));
+        model.add_layer(Layer::new_relu());
+        model.add_layer(Layer::new_dense(10, 2, None));
+        model.add_layer(Layer::new_sofmax());
 
         model.fit(&x_train, &y_train);
 

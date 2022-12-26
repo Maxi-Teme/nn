@@ -1,6 +1,6 @@
 extern crate blas_src;
 
-use nn::{Dense, Model, ReLU, Sequential, SoftmaxAndCategoricalCrossEntropy};
+use nn::{Layer, Loss, Model, Sequential};
 
 use nn::conversions::one_hot_encode;
 use nn::helpers;
@@ -14,24 +14,24 @@ fn main() {
     let n_outputs = 3;
 
     let mut model = Sequential::new();
-    model.add_layer(Dense::new(
+    model.add_layer(Layer::new_dense(
         n_inputs,
         hidden_layer_size,
         Some(learning_rate),
     ));
-    model.add_layer(ReLU::new());
-    model.add_layer(Dense::new(
+    model.add_layer(Layer::new_relu());
+    model.add_layer(Layer::new_dense(
         hidden_layer_size,
         hidden_layer_size,
         Some(learning_rate),
     ));
-    model.add_layer(ReLU::new());
-    model.add_layer(Dense::new(
+    model.add_layer(Layer::new_relu());
+    model.add_layer(Layer::new_dense(
         hidden_layer_size,
         n_outputs,
         Some(learning_rate),
     ));
-    model.set_loss_fn(SoftmaxAndCategoricalCrossEntropy::new());
+    model.set_loss_fn(Loss::new_scce());
 
     let (x, y) = helpers::spiral_data(100, 3);
 

@@ -1,4 +1,5 @@
-use dyn_clone::DynClone;
+use serde::{Deserialize, Serialize};
+
 use ndarray::{Array1, Array2, Axis};
 use ndarray_rand::rand::Rng;
 use ndarray_rand::rand_distr::Uniform;
@@ -6,7 +7,67 @@ use ndarray_rand::RandomExt;
 
 use crate::functions::{relu, relu_grad, softmax, softmax_grad};
 
-pub trait Layer: DynClone {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum Layer {
+    Dense(Dense),
+    Dropout(Dropout),
+    ReLU(ReLU),
+    Softmax(Softmax),
+}
+
+impl Layer {
+    pub fn new_dense(
+        n_inputs: usize,
+        size: usize,
+        learning_rate: Option<f64>,
+    ) -> Self {
+        Self::Dense(Dense::new(n_inputs, size, learning_rate))
+    }
+
+    pub fn new_dropout(
+        n_inputs: usize,
+        numerator: u32,
+        denominator: u32,
+    ) -> Self {
+        Self::Dropout(Dropout::new(n_inputs, numerator, denominator))
+    }
+
+    pub fn new_relu() -> Self {
+        Self::ReLU(ReLU::new())
+    }
+
+    pub fn new_sofmax() -> Self {
+        Self::Softmax(Softmax::new())
+    }
+
+    pub fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64> {
+        match self {
+            Self::Dense(dense) => dense.forward(inputs),
+            Self::Dropout(dropout) => dropout.forward(inputs),
+            Self::ReLU(relu) => relu.forward(inputs),
+            Self::Softmax(softmax) => softmax.forward(inputs),
+        }
+    }
+
+    pub fn backward(&mut self, dvalues: &Array2<f64>) -> Array2<f64> {
+        match self {
+            Self::Dense(dense) => dense.backward(dvalues),
+            Self::Dropout(dropout) => dropout.backward(dvalues),
+            Self::ReLU(relu) => relu.backward(dvalues),
+            Self::Softmax(softmax) => softmax.backward(dvalues),
+        }
+    }
+    pub fn predict(&self, inputs: Array2<f64>) -> Array2<f64> {
+        match self {
+            Self::Dense(dense) => dense.predict(inputs),
+            Self::Dropout(dropout) => dropout.predict(inputs),
+            Self::ReLU(relu) => relu.predict(inputs),
+            Self::Softmax(softmax) => softmax.predict(inputs),
+        }
+    }
+}
+
+trait Layerable {
     fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64>;
 
     fn backward(&mut self, dvalues: &Array2<f64>) -> Array2<f64>;
@@ -14,10 +75,8 @@ pub trait Layer: DynClone {
     fn predict(&self, inputs: Array2<f64>) -> Array2<f64>;
 }
 
-dyn_clone::clone_trait_object!(Layer);
-
 /// dense network layer with weights and biases
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Dense {
     weights: Array2<f64>,
     biases: Array1<f64>,
@@ -35,8 +94,8 @@ impl Dense {
         n_inputs: usize,
         size: usize,
         learning_rate: Option<f64>,
-    ) -> Box<Self> {
-        Box::new(Self {
+    ) -> Self {
+        Self {
             weights: Array2::<f64>::random(
                 (n_inputs, size),
                 Uniform::new(-1.0, 1.0),
@@ -49,11 +108,11 @@ impl Dense {
             dweights: Array2::<f64>::zeros((0, 0)),
             dbiases: Array1::<f64>::zeros(0),
             dinputs: Array2::<f64>::zeros((0, 0)),
-        })
+        }
     }
 }
 
-impl Layer for Dense {
+impl Layerable for Dense {
     fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64> {
         self.last_inputs = inputs;
 
@@ -79,18 +138,18 @@ impl Layer for Dense {
 }
 
 /// dropout network layer with dropout mask
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Dropout {
     mask: Array1<f64>,
     frac: (u32, u32),
 }
 
 impl Dropout {
-    pub fn new(n_inputs: usize, numerator: u32, denominator: u32) -> Box<Self> {
-        Box::new(Self {
+    pub fn new(n_inputs: usize, numerator: u32, denominator: u32) -> Self {
+        Self {
             mask: Array1::<f64>::ones(n_inputs),
             frac: (numerator, denominator),
-        })
+        }
     }
 
     fn update_mask(&self) -> Array1<f64> {
@@ -105,7 +164,7 @@ impl Dropout {
     }
 }
 
-impl Layer for Dropout {
+impl Layerable for Dropout {
     fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64> {
         self.update_mask();
 
@@ -122,20 +181,20 @@ impl Layer for Dropout {
 }
 
 /// rectified linear activation function layer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ReLU {
     last_inputs: Array2<f64>,
 }
 
 impl ReLU {
-    pub fn new() -> Box<Self> {
-        Box::new(Self {
+    pub fn new() -> Self {
+        Self {
             last_inputs: Array2::<f64>::zeros((0, 0)),
-        })
+        }
     }
 }
 
-impl Layer for ReLU {
+impl Layerable for ReLU {
     fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64> {
         self.last_inputs = inputs;
 
@@ -152,20 +211,20 @@ impl Layer for ReLU {
 }
 
 /// Softmax activation function layer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Softmax {
     last_inputs: Array2<f64>,
 }
 
 impl Softmax {
-    pub fn new() -> Box<Self> {
-        Box::new(Self {
+    pub fn new() -> Self {
+        Self {
             last_inputs: Array2::<f64>::zeros((0, 0)),
-        })
+        }
     }
 }
 
-impl Layer for Softmax {
+impl Layerable for Softmax {
     fn forward(&mut self, inputs: Array2<f64>) -> Array2<f64> {
         self.last_inputs = inputs.clone();
 

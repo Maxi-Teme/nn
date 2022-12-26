@@ -1,11 +1,75 @@
-use dyn_clone::DynClone;
+use serde::{Deserialize, Serialize};
+
 use ndarray::Array2;
 
 use crate::functions::{
     accuracy, ccr_grad, ccr_mean, softmax, softmax_and_ccr_grad,
 };
 
-pub trait Loss: DynClone {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum Loss {
+    CategoricalCrossEntorpy(CategoricalCrossEntorpy),
+    SoftmaxAndCategoricalCrossEntropy(SoftmaxAndCategoricalCrossEntropy),
+}
+
+impl Loss {
+    pub fn new_cce() -> Self {
+        Self::CategoricalCrossEntorpy(CategoricalCrossEntorpy)
+    }
+
+    pub fn new_scce() -> Self {
+        Self::SoftmaxAndCategoricalCrossEntropy(
+            SoftmaxAndCategoricalCrossEntropy,
+        )
+    }
+
+    pub fn mean_loss(
+        &self,
+        predicions: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> f64 {
+        match self {
+            Self::CategoricalCrossEntorpy(ccr) => {
+                ccr.mean_loss(predicions, targets)
+            }
+            Self::SoftmaxAndCategoricalCrossEntropy(sccr) => {
+                sccr.mean_loss(predicions, targets)
+            }
+        }
+    }
+
+    pub fn accuracy(
+        &self,
+        predicions: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> f64 {
+        match self {
+            Self::CategoricalCrossEntorpy(ccr) => {
+                ccr.accuracy(predicions, targets)
+            }
+            Self::SoftmaxAndCategoricalCrossEntropy(sccr) => {
+                sccr.accuracy(predicions, targets)
+            }
+        }
+    }
+
+    pub fn backward(
+        &self,
+        dvalues: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> Array2<f64> {
+        match self {
+            Self::CategoricalCrossEntorpy(ccr) => {
+                ccr.backward(dvalues, targets)
+            }
+            Self::SoftmaxAndCategoricalCrossEntropy(sccr) => {
+                sccr.backward(dvalues, targets)
+            }
+        }
+    }
+}
+
+trait LossFn {
     fn mean_loss(&self, predicions: &Array2<f64>, targets: &Array2<f64>)
         -> f64;
 
@@ -18,19 +82,37 @@ pub trait Loss: DynClone {
     ) -> Array2<f64>;
 }
 
-dyn_clone::clone_trait_object!(Loss);
+/// Categorical cross entropy loss layer
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CategoricalCrossEntorpy;
 
-/// Softmax activation and categorical cross entropy loss layer
-#[derive(Clone)]
-pub struct SoftmaxAndCategoricalCrossEntropy;
+impl LossFn for CategoricalCrossEntorpy {
+    fn mean_loss(
+        &self,
+        predictions: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> f64 {
+        ccr_mean(predictions, targets)
+    }
 
-impl SoftmaxAndCategoricalCrossEntropy {
-    pub fn new() -> Box<Self> {
-        Box::new(Self)
+    fn accuracy(&self, predicions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
+        accuracy(predicions, targets)
+    }
+
+    fn backward(
+        &self,
+        dvalues: &Array2<f64>,
+        targets: &Array2<f64>,
+    ) -> Array2<f64> {
+        ccr_grad(&dvalues, targets)
     }
 }
 
-impl Loss for SoftmaxAndCategoricalCrossEntropy {
+/// Softmax activation and categorical cross entropy loss layer
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SoftmaxAndCategoricalCrossEntropy;
+
+impl LossFn for SoftmaxAndCategoricalCrossEntropy {
     fn mean_loss(
         &self,
         predictions: &Array2<f64>,
@@ -53,37 +135,5 @@ impl Loss for SoftmaxAndCategoricalCrossEntropy {
         targets: &Array2<f64>,
     ) -> Array2<f64> {
         softmax_and_ccr_grad(&softmax(loast_output), targets)
-    }
-}
-
-/// Categorical cross entropy loss layer
-#[derive(Clone)]
-pub struct CategoricalCrossEntorpy;
-
-impl CategoricalCrossEntorpy {
-    pub fn new() -> Box<Self> {
-        Box::new(Self)
-    }
-}
-
-impl Loss for CategoricalCrossEntorpy {
-    fn mean_loss(
-        &self,
-        predictions: &Array2<f64>,
-        targets: &Array2<f64>,
-    ) -> f64 {
-        ccr_mean(predictions, targets)
-    }
-
-    fn accuracy(&self, predicions: &Array2<f64>, targets: &Array2<f64>) -> f64 {
-        accuracy(predicions, targets)
-    }
-
-    fn backward(
-        &self,
-        dvalues: &Array2<f64>,
-        targets: &Array2<f64>,
-    ) -> Array2<f64> {
-        ccr_grad(&dvalues, targets)
     }
 }

@@ -2,7 +2,7 @@ extern crate blas_src;
 
 use ndarray::{s, Array1, Array2};
 use nn::conversions::one_hot_encode;
-use nn::{Dense, Model, ReLU, Sequential, SoftmaxAndCategoricalCrossEntropy};
+use nn::{Layer, Loss, Model, Sequential};
 
 pub fn load_mnist_dataset(
 ) -> ((Array2<f64>, Array2<f64>), (Array2<f64>, Array2<f64>)) {
@@ -71,10 +71,18 @@ fn main() {
     let ((x_train, y_train), _) = load_mnist_dataset();
 
     let mut model = Sequential::new();
-    model.add_layer(Dense::new(x_train.ncols(), 800, Some(learning_rate)));
-    model.add_layer(ReLU::new());
-    model.add_layer(Dense::new(800, y_train.ncols(), Some(learning_rate)));
-    model.set_loss_fn(SoftmaxAndCategoricalCrossEntropy::new());
+    model.add_layer(Layer::new_dense(
+        x_train.ncols(),
+        800,
+        Some(learning_rate),
+    ));
+    model.add_layer(Layer::new_relu());
+    model.add_layer(Layer::new_dense(
+        800,
+        y_train.ncols(),
+        Some(learning_rate),
+    ));
+    model.set_loss_fn(Loss::new_scce());
 
     println!("Training data has {} datapoints.\n", x_train.shape()[0]);
     println!("Starting training\n");
@@ -108,4 +116,16 @@ fn main() {
             );
         }
     }
+
+    model.save("data/models/mnist.mdl");
+
+    let loaded_model = Sequential::load("data/models/mnist.mdl");
+
+    let x_test = x_train.slice(s![0..4usize, ..]).to_owned();
+    let y_test = y_train.slice(s![0..4usize, ..]).to_owned();
+
+    println!(
+        "loaded model acc: {:.4}",
+        loaded_model.accuracy(&x_test, &y_test),
+    );
 }
