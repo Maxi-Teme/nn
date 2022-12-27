@@ -45,6 +45,17 @@ impl Sequential {
     pub fn set_loss_fn(&mut self, loss_fn: Loss) {
         self.loss_fn = loss_fn;
     }
+
+    pub fn set_learing_rate(&mut self, learning_rate: f64) {
+        for l in self.layers.iter_mut() {
+            match l {
+                Layer::Dense(dense) => dense.set_learing_rate(learning_rate),
+                Layer::Dropout(_) => {}
+                Layer::ReLU(_) => {}
+                Layer::Softmax(_) => {}
+            }
+        }
+    }
 }
 
 impl Model for Sequential {

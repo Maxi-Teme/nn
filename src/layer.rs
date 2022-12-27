@@ -110,6 +110,10 @@ impl Dense {
             dinputs: Array2::<f64>::zeros((0, 0)),
         }
     }
+
+    pub fn set_learing_rate(&mut self, learning_rate: f64) {
+        self.learning_rate = learning_rate;
+    }
 }
 
 impl Layerable for Dense {

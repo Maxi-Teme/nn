@@ -44,6 +44,8 @@ fn main() {
             println!("\nepoch {}/{}", e, n_epochs);
             println!("loss: {}", &model.loss(&x, &y));
             println!("acc: {}", &model.accuracy(&x, &y));
+
+            model.set_learing_rate(learning_rate * 0.9);
         }
     }
 }
