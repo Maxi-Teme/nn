@@ -81,11 +81,16 @@ pub struct Dense {
     weights: Array2<f64>,
     biases: Array1<f64>,
 
+    #[serde(skip_serializing, default)]
     learning_rate: f64,
 
+    #[serde(skip_serializing, default)]
     last_inputs: Array2<f64>,
+    #[serde(skip_serializing, default)]
     dweights: Array2<f64>,
+    #[serde(skip_serializing, default)]
     dbiases: Array1<f64>,
+    #[serde(skip_serializing, default)]
     dinputs: Array2<f64>,
 }
 
@@ -144,6 +149,7 @@ impl Layerable for Dense {
 /// dropout network layer with dropout mask
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Dropout {
+    #[serde(skip_serializing, default)]
     mask: Array1<f64>,
     frac: (u32, u32),
 }
@@ -156,7 +162,7 @@ impl Dropout {
         }
     }
 
-    fn update_mask(&self) -> Array1<f64> {
+    fn update_mask(&mut self) -> Array1<f64> {
         let mut rng = ndarray_rand::rand::thread_rng();
         Array1::<f64>::ones(self.mask.len()).map(|i| {
             if rng.gen_ratio(self.frac.0, self.frac.1) {
@@ -187,6 +193,7 @@ impl Layerable for Dropout {
 /// rectified linear activation function layer
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ReLU {
+    #[serde(skip_serializing, default)]
     last_inputs: Array2<f64>,
 }
 
@@ -217,6 +224,7 @@ impl Layerable for ReLU {
 /// Softmax activation function layer
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Softmax {
+    #[serde(skip_serializing, default)]
     last_inputs: Array2<f64>,
 }
 

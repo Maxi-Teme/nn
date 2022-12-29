@@ -1,12 +1,14 @@
 use ndarray::{Array, Dimension};
 
 pub mod conversions;
+mod error;
 pub mod functions;
 pub mod helpers;
 mod layer;
 mod loss;
 mod model;
 
+pub use error::NNError;
 pub use layer::{Dense, Dropout, Layer, ReLU, Softmax};
 pub use loss::{
     CategoricalCrossEntorpy, Loss, SoftmaxAndCategoricalCrossEntropy,
@@ -25,6 +27,8 @@ pub fn clamp64<D: Dimension>(arr: &mut Array<f64, D>) {
 
 #[cfg(test)]
 mod test {
+    extern crate blas_src;
+
     use ndarray::Array2;
 
     use crate::Layer;
@@ -42,14 +46,14 @@ mod test {
         )
         .unwrap();
         let y_train = Array2::from_shape_vec(
-            (2, 5),
-            vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0, 5.0, 0.0],
+            (4, 2),
+            vec![1.0, 0.0, 2.0, 0.0, 3.0, 0.0, 4.0, 0.0],
         )
         .unwrap();
 
         let mut model = Sequential::new();
 
-        model.add_layer(Layer::new_dense(2, 10, None));
+        model.add_layer(Layer::new_dense(5, 10, None));
         model.add_layer(Layer::new_relu());
         model.add_layer(Layer::new_dense(10, 2, None));
         model.add_layer(Layer::new_sofmax());

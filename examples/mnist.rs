@@ -77,6 +77,7 @@ fn main() {
         Some(learning_rate),
     ));
     model.add_layer(Layer::new_relu());
+    model.add_layer(Layer::new_dropout(800, 1, 10));
     model.add_layer(Layer::new_dense(
         800,
         y_train.ncols(),
@@ -117,9 +118,9 @@ fn main() {
         }
     }
 
-    model.save("data/models/mnist.mdl");
+    model.save("data/models/mnist.json").unwrap();
 
-    let loaded_model = Sequential::load("data/models/mnist.mdl");
+    let loaded_model = Sequential::load("data/models/mnist.json").unwrap();
 
     let x_test = x_train.slice(s![0..4usize, ..]).to_owned();
     let y_test = y_train.slice(s![0..4usize, ..]).to_owned();

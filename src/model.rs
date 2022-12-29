@@ -1,15 +1,13 @@
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
-use bincode::{deserialize_from, serialize_into};
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 
-use crate::{Layer, Loss};
+use crate::{Layer, Loss, NNError};
 
 pub trait Model {
-    fn load(filepath: impl AsRef<Path>) -> Self;
+    fn load(filepath: impl AsRef<Path>) -> Result<Box<Self>, NNError>;
 
     fn fit(&mut self, inputs: &Array2<f64>, labels: &Array2<f64>);
 
@@ -19,7 +17,7 @@ pub trait Model {
 
     fn accuracy(&self, inputs: &Array2<f64>, targets: &Array2<f64>) -> f64;
 
-    fn save(&self, filepath: impl AsRef<Path>);
+    fn save(&self, filepath: impl AsRef<Path>) -> Result<(), NNError>;
 }
 
 /// Sequential model with default learning rate of 0.1
@@ -102,13 +100,44 @@ impl Model for Sequential {
         self.loss_fn.accuracy(&self.predict(inputs), targets)
     }
 
-    fn load(filepath: impl AsRef<Path>) -> Self {
-        let file = BufReader::new(File::open(filepath).unwrap());
-        deserialize_from(file).unwrap()
+    fn load(filepath: impl AsRef<Path>) -> Result<Box<Self>, NNError> {
+        let file = File::open(filepath).map_err(NNError::FileSystem)?;
+        let model: Self =
+            serde_json::from_reader(&file).map_err(NNError::Serde)?;
+
+        Ok(Box::new(model))
     }
 
-    fn save(&self, filepath: impl AsRef<Path>) {
-        let file = BufWriter::new(File::create(filepath).unwrap());
-        serialize_into(file, self).unwrap();
+    fn save(&self, filepath: impl AsRef<Path>) -> Result<(), NNError> {
+        let file = File::create(filepath).map_err(NNError::FileSystem)?;
+
+        serde_json::to_writer(&file, &self).map_err(NNError::Serde)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{Layer, Loss, Model};
+
+    use super::Sequential;
+
+    #[test]
+    fn save_load_model_test() {
+        let mut model = Sequential::new();
+        model.add_layer(Layer::new_dense(2, 4, Some(0.1)));
+        model.add_layer(Layer::new_relu());
+        model.add_layer(Layer::new_dense(4, 4, Some(0.1)));
+        model.add_layer(Layer::new_sofmax());
+        model.add_layer(Layer::new_dropout(4, 9, 10));
+        model.set_loss_fn(Loss::new_scce());
+
+        model.save("data/models/save_load_model_test.json").unwrap();
+
+        let mut loaded_model =
+            Sequential::load("data/models/save_load_model_test.json").unwrap();
+
+        loaded_model.set_learing_rate(0.05);
+
+        model.save("data/models/save_load_model_test.json").unwrap();
     }
 }
